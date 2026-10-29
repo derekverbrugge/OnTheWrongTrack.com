@@ -7,7 +7,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 from icalendar import Calendar
@@ -26,7 +26,8 @@ def main():
         raw = response.read()
     calendar = Calendar.from_ical(raw)
     previous = json.loads(OUTPUT.read_text(encoding="utf-8")) if OUTPUT.exists() else []
-    previous_dates = {item["url"]: item.get("date", "") for item in previous}
+    previous_by_url = {item["url"]: item for item in previous}
+    now = datetime.now(timezone.utc).isoformat()
     designs = {}
     for event in calendar.walk("VEVENT"):
         if str(event.get("STATUS", "")).upper() == "CANCELLED":
@@ -47,15 +48,21 @@ def main():
         start = event.get("DTSTART")
         dt = start.dt if start else None
         event_date = dt.date().isoformat() if isinstance(dt, datetime) else dt.isoformat() if isinstance(dt, date) else ""
+        image = image_match.group(0)
+        old = previous_by_url.get(url)
+        # A changed screenshot or title is a replacement; a new URL is an addition.
+        changed = not old or old.get("title") != title or old.get("image") != image
         designs[url] = {
             "title": title,
-            "date": previous_dates.get(url) or event_date,
+            "date": old.get("date", event_date) if old else event_date,
             "url": url,
-            "image": image_match.group(0),
+            "image": image,
+            "updated_at": now if changed else old.get("updated_at", "") ,
         }
     if not designs:
         sys.exit("No matching TSW designs found; preserving existing gallery.")
-    result = sorted(designs.values(), key=lambda item: (item["date"], item["title"]))
+    # Recently added/replaced designs come first; unchanged designs retain their order.
+    result = sorted(designs.values(), key=lambda item: (item.get("updated_at", ""), item.get("date", "")), reverse=True)
     OUTPUT.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Synced {len(result)} designs from calendar (added/updated/removed as needed).")
 
