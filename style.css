@@ -24,3 +24,9 @@ a,a:link,a:visited,a:hover,a:focus,a:active{text-decoration:none}
 .site-logo{width:54px;height:54px;border-radius:50%;object-fit:cover;flex-shrink:0}
 .site-logo[hidden]{display:none}
 @media(max-width:560px){.site-logo{width:44px;height:44px}}
+
+/* Footer channel identity */
+.footer-title,.footer-title:link,.footer-title:visited{display:inline-flex;align-items:center;gap:12px;color:var(--accent);font-weight:800;text-decoration:none}
+.footer-title:hover,.footer-title:focus{color:var(--accent);text-decoration:none}
+.footer-logo{width:48px;height:48px;object-fit:cover;border-radius:50%;flex-shrink:0}
+@media(max-width:560px){.footer-logo{width:42px;height:42px}}
