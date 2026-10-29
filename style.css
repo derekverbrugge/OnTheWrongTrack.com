@@ -18,3 +18,9 @@ a,a:link,a:visited,a:hover,a:focus,a:active{text-decoration:none}
 .design-card-link:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
 .footer-title{font-weight:800;color:var(--muted);text-decoration:none}.footer-title:hover,.footer-title:focus{text-decoration:none;color:var(--accent)}
+
+/* Channel avatar beside the shared wordmark */
+.brand{display:inline-flex;align-items:center;gap:12px}
+.site-logo{width:54px;height:54px;border-radius:50%;object-fit:cover;flex-shrink:0}
+.site-logo[hidden]{display:none}
+@media(max-width:560px){.site-logo{width:44px;height:44px}}
