@@ -16,3 +16,5 @@ a,a:link,a:visited,a:hover,a:focus,a:active{text-decoration:none}
 .design-card-link:visited,.design-card-link:hover{color:var(--ink)}
 .design-card-link:hover h3,.design-card-link:focus-visible h3{color:var(--accent)}
 .design-card-link:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.footer-title{font-weight:800;color:var(--muted);text-decoration:none}.footer-title:hover,.footer-title:focus{text-decoration:none;color:var(--accent)}
