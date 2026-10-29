@@ -4,3 +4,8 @@
 /* Consistent responsive media crops */
 .design-image{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;object-position:center;background:#25323c}
 .card{min-width:0}
+
+/* Fixed media geometry: prevent tall source screenshots from stretching cards */
+.card .design-image{display:block;width:100%;height:190px;max-height:190px;object-fit:cover;object-position:center}
+.cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
+@media(max-width:600px){.cards{grid-template-columns:1fr}.card .design-image{height:210px;max-height:210px}}
