@@ -31,13 +31,18 @@ class PlainText(HTMLParser):
             self.text.append(" ")
 
 def clean_text(value):
-    """Turn calendar description markup into a natural display title."""
-    value = html.unescape(html.unescape(str(value)))
-    value = re.sub(r"(?i)<br\s*/?>|</?(?:p|div|span|b|strong|em|i)(?:\s+[^>]*)?>", " ", value)
-    value = re.sub(r"https?://\S+", " ", value)
-    value = re.split(r"\s+#(?:TSW\d*|[A-Za-z][\w-]*)\b", value, maxsplit=1)[0]
-    value = re.sub(r"\s+", " ", value).strip()
-    value = re.sub(r"\s+[.!?]+$", lambda m: m.group(0).strip()[-1], value)
+    """Produce a readable design title from calendar text without altering names."""
+    value = html.unescape(str(value))
+    value = re.sub(r"(?i)<br\\s*/?>|</?(?:p|div|span|b|strong|em|i)(?:\\s+[^>]*)?>", " ", value)
+    value = re.sub(r"https?://[^\\s<>]+", " ", value)
+    # Remove hashtags individually, including hashtags at the beginning of a line.
+    value = re.sub(r"(?<!\\w)#[\\w-]+", " ", value)
+    value = re.sub(r"<[^>]+>", " ", value)
+    value = re.sub(r"\\s+", " ", value).strip(" \\t\\r\\n<>-")
+    # Retain intended punctuation, but remove trailing period on display titles.
+    value = value.rstrip(". ").strip()
+    # Normalize only common locomotive class abbreviations.
+    value = re.sub(r"\\bBr(?=\\s*\\d)", "BR", value)
     return value
 
 
