@@ -31,13 +31,14 @@ class PlainText(HTMLParser):
             self.text.append(" ")
 
 def clean_text(value):
-    # Unescape twice because calendar imports sometimes double-encode HTML.
+    # Decode entities without interpreting ordinary text as HTML markup.
     value = html.unescape(html.unescape(str(value)))
-    parser = PlainText()
-    parser.feed(value)
-    value = html.unescape("".join(parser.text))
-    value = TAGS_RE.sub("", value)
-    return re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"<br\\s*/?>", " ", value, flags=re.I)
+    value = re.sub(r"</?(?:p|div|span|b|strong|em|i)(?:\\s+[^>]*)?>", " ", value, flags=re.I)
+    value = re.sub(r"\\s+", " ", value).strip()
+    # Correct a malformed punctuation sequence; never invent punctuation.
+    return re.sub(r"\\.;(?=\\s|$)", ".", value)
+
 
 def timestamp(prop):
     if not prop:
@@ -85,7 +86,7 @@ def main():
         changed = not old or old.get("title") != title or old.get("image") != image or old.get("url") != url
         # Preserve an existing change timestamp across repeat runs.
         if changed:
-            updated = max(datetime.now(timezone.utc).isoformat(), modified)
+            updated = modified or datetime.now(timezone.utc).isoformat()
         elif modified and modified > old.get("calendar_modified_at", ""):
             updated = modified
         else:
