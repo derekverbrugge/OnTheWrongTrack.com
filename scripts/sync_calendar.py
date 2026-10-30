@@ -49,7 +49,7 @@ def main():
     changes = 0
     for event in events(access_token()):
         description = re.sub(r"<[^>]+>", "", event.get("description", ""))
-        match = re.search(r"https://creatorsclub\\.dovetailgames\\.com/creations/\\d+", description)
+        match = re.search(r"https://creatorsclub\.dovetailgames\.com/creations/\d+", description)
         if not match or match.group(0) not in by_url:
             continue
         design = by_url[match.group(0)]
