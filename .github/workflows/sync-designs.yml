@@ -5,19 +5,23 @@ on:
     - cron: '27 */6 * * *'
 permissions:
   contents: write
+concurrency:
+  group: sync-tsw-designs
+  cancel-in-progress: false
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-      - run: python -m pip install icalendar
-      - name: Sync private calendar
+          node-version: '22'
+      - name: Install calendar parser
+        run: npm install --no-save --no-package-lock ical.js
+      - name: Sync private Google Calendar
         env:
           CALENDAR_ICAL_URL: ${{ secrets.CALENDAR_ICAL_URL }}
-        run: python scripts/sync_designs.py
+        run: node scripts/sync-designs.mjs
       - name: Commit changed designs
         run: |
           git config user.name "github-actions[bot]"
