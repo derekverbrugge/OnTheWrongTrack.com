@@ -1,104 +1,110 @@
-"""Synchronize the website's design gallery from a private Google Calendar iCal feed.
+"""Synchronize TSW designs from a private Google Calendar iCal feed.
 
-Set CALENDAR_ICAL_URL as a GitHub Actions repository secret. Never commit the URL.
-Only events with a Creators Club link and Dovetail screenshot are published.
+The calendar is authoritative. GitHub Actions runs this script automatically.
+Never commit CALENDAR_ICAL_URL: configure it as an Actions secret.
 """
-import json
 import html
-from html.parser import HTMLParser
+import json
 import os
 import re
 import sys
 from datetime import date, datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.request import Request, urlopen
 from icalendar import Calendar
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "designs.json"
-URL_RE = re.compile(r"https?://creatorsclub\.dovetailgames\.com/(?:creations|mods)/[0-9]+", re.I)
-IMAGE_RE = re.compile(r"https?://screenshot-prod\.dovetailgames\.net/[a-zA-Z0-9-]+", re.I)
+LINK_RE = re.compile(r"https?://creatorsclub\.dovetailgames\.com/(?:creations|mods)/\d+", re.I)
+IMAGE_RE = re.compile(r"https?://screenshot-prod\.dovetailgames\.net/[\w-]+", re.I)
+TAGS_RE = re.compile(r"<[^>]*>")
 
-class _TextExtractor(HTMLParser):
+class PlainText(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.parts = []
-
+        self.text = []
     def handle_data(self, data):
-        self.parts.append(data)
+        self.text.append(data)
+    def handle_starttag(self, tag, attrs):
+        if tag in ("br", "p", "div"):
+            self.text.append(" ")
 
+def clean_text(value):
+    # Unescape twice because calendar imports sometimes double-encode HTML.
+    value = html.unescape(html.unescape(str(value)))
+    parser = PlainText()
+    parser.feed(value)
+    value = html.unescape("".join(parser.text))
+    value = TAGS_RE.sub("", value)
+    return re.sub(r"\s+", " ", value).strip()
 
-def clean_title(raw):
-    # Calendar descriptions may contain HTML fragments and encoded entities.
-    parser = _TextExtractor()
-    parser.feed(html.unescape(raw))
-    title = html.unescape("".join(parser.parts)).strip()
-    title = re.sub(r";\.(?=\s|$)", ".", title)
-    return title
+def timestamp(prop):
+    if not prop:
+        return ""
+    dt = prop.dt
+    if isinstance(dt, datetime):
+        return dt.replace(tzinfo=dt.tzinfo or timezone.utc).astimezone(timezone.utc).isoformat()
+    return ""
 
+def event_title(description):
+    for line in description.splitlines():
+        if not line.strip() or line.lstrip().startswith(("http", "#")):
+            continue
+        title = clean_text(re.split(r"\s+#(?:TSW|USA|Germany|BR\d)", line, maxsplit=1, flags=re.I)[0])
+        if title:
+            return title
+    return "Train Sim World design"
 
 def main():
     feed_url = os.environ.get("CALENDAR_ICAL_URL", "").strip()
     if not feed_url.startswith("https://"):
-        sys.exit("Set the CALENDAR_ICAL_URL repository secret to your private Google Calendar iCal URL.")
-    request = Request(feed_url, headers={"User-Agent": "OnTheWrongTrack-CalendarSync/1.0"})
-    with urlopen(request, timeout=35) as response:
-        raw = response.read()
-    calendar = Calendar.from_ical(raw)
+        sys.exit("CALENDAR_ICAL_URL secret is missing or invalid.")
+    with urlopen(Request(feed_url, headers={"User-Agent": "OnTheWrongTrack-CalendarSync/1.0"}), timeout=35) as response:
+        calendar = Calendar.from_ical(response.read())
+
     previous = json.loads(OUTPUT.read_text(encoding="utf-8")) if OUTPUT.exists() else []
-    previous_by_url = {item["url"]: item for item in previous}
-    previous_order = {item["url"]: i for i, item in enumerate(previous)}
-    now = datetime.now(timezone.utc).isoformat()
+    previous_by_url = {d["url"]: d for d in previous}
     designs = {}
     for event in calendar.walk("VEVENT"):
         if str(event.get("STATUS", "")).upper() == "CANCELLED":
             continue
-        description = str(event.get("DESCRIPTION", ""))
-        summary = str(event.get("SUMMARY", ""))
-        url_match = URL_RE.search(description + " " + summary)
-        image_match = IMAGE_RE.search(summary + " " + description)
-        if not url_match or not image_match:
+        description, summary = str(event.get("DESCRIPTION", "")), str(event.get("SUMMARY", ""))
+        link = LINK_RE.search(description + " " + summary)
+        image = IMAGE_RE.search(summary + " " + description)
+        if not link or not image:
             continue
-        url = url_match.group(0)
-        # Description's first line is the human-readable design name.
-        title = next((line.strip() for line in description.splitlines()
-                      if line.strip() and not line.lstrip().startswith(("http", "#"))), "")
-        title = re.split(r"\s+#(?:TSW|USA|Germany|BR\d)", title, maxsplit=1, flags=re.I)[0].strip()
-        if not title:
-            title = "Train Sim World design"
+        url = link.group(0)
+        title = event_title(description)
+        old = previous_by_url.get(url, {})
         start = event.get("DTSTART")
         dt = start.dt if start else None
-        event_date = dt.date().isoformat() if isinstance(dt, datetime) else dt.isoformat() if isinstance(dt, date) else ""
-        image = image_match.group(0)
-        old = previous_by_url.get(url)
-        # A changed screenshot or title is a replacement; a new URL is an addition.
-        changed = not old or old.get("title") != title or old.get("image") != image
-        # Prefer actual calendar modification timestamps to future posting dates.
-        modified = event.get("LAST-MODIFIED") or event.get("DTSTAMP") or event.get("CREATED")
-        modified_dt = modified.dt if modified else None
-        modified_at = modified_dt.astimezone(timezone.utc).isoformat() if isinstance(modified_dt, datetime) else ""
-        effective_updated = now if changed else (old.get("updated_at", "") if old else "")
-        # A calendar edit is relevant even when its image and title are unchanged.
-        if modified_at and (not old or modified_at > old.get("calendar_modified_at", "")):
-            effective_updated = max(effective_updated if changed else "", modified_at)
+        scheduled = dt.date().isoformat() if isinstance(dt, datetime) else dt.isoformat() if isinstance(dt, date) else ""
+        # LAST-MODIFIED is the calendar edit time; DTSTAMP is not a reliable edit signal.
+        modified = timestamp(event.get("LAST-MODIFIED"))
+        changed = not old or old.get("title") != title or old.get("image") != image or old.get("url") != url
+        # Preserve an existing change timestamp across repeat runs.
+        if changed:
+            updated = max(datetime.now(timezone.utc).isoformat(), modified)
+        elif modified and modified > old.get("calendar_modified_at", ""):
+            updated = modified
+        else:
+            updated = old.get("updated_at", "") or modified
         candidate = {
-            "title": title,
-            "date": old.get("date", event_date) if old else event_date,
-            "url": url,
-            "image": image,
-            "updated_at": effective_updated,
-            "calendar_modified_at": modified_at,
+            "title": title, "date": old.get("date") or scheduled,
+            "url": url, "image": image.group(0),
+            "updated_at": updated, "calendar_modified_at": modified,
         }
-        # Recurring calendar occurrences can share a design URL; keep its newest revision.
-        existing = designs.get(url)
-        if existing is None or candidate["updated_at"] >= existing["updated_at"]:
+        current = designs.get(url)
+        if not current or candidate["updated_at"] > current["updated_at"]:
             designs[url] = candidate
+
     if not designs:
-        sys.exit("No matching TSW designs found; preserving existing gallery.")
-    # Most recently edited/added first; preserve prior ordering for ties.
-    result = sorted(designs.values(), key=lambda item: (-datetime.fromisoformat(item["updated_at"]).timestamp() if item.get("updated_at") else float("inf"), previous_order.get(item["url"], len(previous_order))))
-    OUTPUT.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Synced {len(result)} designs from calendar (added/updated/removed as needed).")
+        sys.exit("No matching TSW designs; preserving previous gallery.")
+    # Most recently changed entries first, on both the homepage and Designs page.
+    result = sorted(designs.values(), key=lambda d: (d["updated_at"], d["url"]), reverse=True)
+    OUTPUT.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Synced {len(result)} TSW designs, newest edits first.")
 
 if __name__ == "__main__":
     main()
