@@ -31,13 +31,14 @@ class PlainText(HTMLParser):
             self.text.append(" ")
 
 def clean_text(value):
-    # Decode entities without interpreting ordinary text as HTML markup.
+    """Turn calendar description markup into a natural display title."""
     value = html.unescape(html.unescape(str(value)))
-    value = re.sub(r"<br\\s*/?>", " ", value, flags=re.I)
-    value = re.sub(r"</?(?:p|div|span|b|strong|em|i)(?:\\s+[^>]*)?>", " ", value, flags=re.I)
-    value = re.sub(r"\\s+", " ", value).strip()
-    # Correct a malformed punctuation sequence; never invent punctuation.
-    return re.sub(r"\\.;(?=\\s|$)", ".", value)
+    value = re.sub(r"(?i)<br\s*/?>|</?(?:p|div|span|b|strong|em|i)(?:\s+[^>]*)?>", " ", value)
+    value = re.sub(r"https?://\S+", " ", value)
+    value = re.split(r"\s+#(?:TSW\d*|[A-Za-z][\w-]*)\b", value, maxsplit=1)[0]
+    value = re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"\s+[.!?]+$", lambda m: m.group(0).strip()[-1], value)
+    return value
 
 
 def timestamp(prop):
@@ -50,9 +51,10 @@ def timestamp(prop):
 
 def event_title(description):
     for line in description.splitlines():
-        if not line.strip() or line.lstrip().startswith(("http", "#")):
+        line = line.strip()
+        if not line or line.startswith(("http", "#", "<http")):
             continue
-        title = clean_text(re.split(r"\s+#(?:TSW|USA|Germany|BR\d)", line, maxsplit=1, flags=re.I)[0])
+        title = clean_text(line)
         if title:
             return title
     return "Train Sim World design"
