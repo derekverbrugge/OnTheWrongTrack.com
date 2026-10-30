@@ -4,6 +4,8 @@ Set CALENDAR_ICAL_URL as a GitHub Actions repository secret. Never commit the UR
 Only events with a Creators Club link and Dovetail screenshot are published.
 """
 import json
+import html
+from html.parser import HTMLParser
 import os
 import re
 import sys
@@ -16,6 +18,24 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "designs.json"
 URL_RE = re.compile(r"https?://creatorsclub\.dovetailgames\.com/(?:creations|mods)/[0-9]+", re.I)
 IMAGE_RE = re.compile(r"https?://screenshot-prod\.dovetailgames\.net/[a-zA-Z0-9-]+", re.I)
+
+class _TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def clean_title(raw):
+    # Calendar descriptions may contain HTML fragments and encoded entities.
+    parser = _TextExtractor()
+    parser.feed(html.unescape(raw))
+    title = html.unescape("".join(parser.parts)).strip()
+    title = re.sub(r";\\.(?=\\s|$)", ".", title)
+    return title
+
 
 def main():
     feed_url = os.environ.get("CALENDAR_ICAL_URL", "").strip()
