@@ -33,16 +33,16 @@ class PlainText(HTMLParser):
 def clean_text(value):
     """Produce a readable design title from calendar text without altering names."""
     value = html.unescape(str(value))
-    value = re.sub(r"(?i)<br\\s*/?>|</?(?:p|div|span|b|strong|em|i)(?:\\s+[^>]*)?>", " ", value)
-    value = re.sub(r"https?://[^\\s<>]+", " ", value)
+    value = re.sub(r"(?i)<br\s*/?>|</?(?:p|div|span|b|strong|em|i)(?:\s+[^>]*)?>", " ", value)
+    value = re.sub(r"https?://[^\s<>]+", " ", value)
     # Remove hashtags individually, including hashtags at the beginning of a line.
-    value = re.sub(r"(?<!\\w)#[\\w-]+", " ", value)
+    value = re.sub(r"(?<!\w)#[\w-]+", " ", value)
     value = re.sub(r"<[^>]+>", " ", value)
-    value = re.sub(r"\\s+", " ", value).strip(" \\t\\r\\n<>-")
+    value = re.sub(r"\s+", " ", value).strip(" \t\r\n<>-")
     # Retain intended punctuation, but remove trailing period on display titles.
     value = value.rstrip(". ").strip()
     # Normalize only common locomotive class abbreviations.
-    value = re.sub(r"\\bBr(?=\\s*\\d)", "BR", value)
+    value = re.sub(r"\bBr(?=\s*\d)", "BR", value)
     return value
 
 
