@@ -33,7 +33,7 @@ def clean_title(raw):
     parser = _TextExtractor()
     parser.feed(html.unescape(raw))
     title = html.unescape("".join(parser.parts)).strip()
-    title = re.sub(r";\\.(?=\\s|$)", ".", title)
+    title = re.sub(r";\.(?=\s|$)", ".", title)
     return title
 
 
