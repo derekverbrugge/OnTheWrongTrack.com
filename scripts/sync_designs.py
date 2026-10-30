@@ -47,6 +47,7 @@ def main():
     calendar = Calendar.from_ical(raw)
     previous = json.loads(OUTPUT.read_text(encoding="utf-8")) if OUTPUT.exists() else []
     previous_by_url = {item["url"]: item for item in previous}
+    previous_order = {item["url"]: i for i, item in enumerate(previous)}
     now = datetime.now(timezone.utc).isoformat()
     designs = {}
     for event in calendar.walk("VEVENT"):
@@ -72,17 +73,30 @@ def main():
         old = previous_by_url.get(url)
         # A changed screenshot or title is a replacement; a new URL is an addition.
         changed = not old or old.get("title") != title or old.get("image") != image
-        designs[url] = {
+        # Prefer actual calendar modification timestamps to future posting dates.
+        modified = event.get("LAST-MODIFIED") or event.get("DTSTAMP") or event.get("CREATED")
+        modified_dt = modified.dt if modified else None
+        modified_at = modified_dt.astimezone(timezone.utc).isoformat() if isinstance(modified_dt, datetime) else ""
+        effective_updated = now if changed else (old.get("updated_at", "") if old else "")
+        # A calendar edit is relevant even when its image and title are unchanged.
+        if modified_at and (not old or modified_at > old.get("calendar_modified_at", "")):
+            effective_updated = max(effective_updated if changed else "", modified_at)
+        candidate = {
             "title": title,
             "date": old.get("date", event_date) if old else event_date,
             "url": url,
             "image": image,
-            "updated_at": now if changed else old.get("updated_at", "") ,
+            "updated_at": effective_updated,
+            "calendar_modified_at": modified_at,
         }
+        # Recurring calendar occurrences can share a design URL; keep its newest revision.
+        existing = designs.get(url)
+        if existing is None or candidate["updated_at"] >= existing["updated_at"]:
+            designs[url] = candidate
     if not designs:
         sys.exit("No matching TSW designs found; preserving existing gallery.")
-    # Recently added/replaced designs come first; unchanged designs retain their order.
-    result = sorted(designs.values(), key=lambda item: (item.get("updated_at", ""), item.get("date", "")), reverse=True)
+    # Most recently edited/added first; preserve prior ordering for ties.
+    result = sorted(designs.values(), key=lambda item: (-datetime.fromisoformat(item["updated_at"]).timestamp() if item.get("updated_at") else float("inf"), previous_order.get(item["url"], len(previous_order))))
     OUTPUT.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Synced {len(result)} designs from calendar (added/updated/removed as needed).")
 
