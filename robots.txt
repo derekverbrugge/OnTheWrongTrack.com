@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://derekverbrugge.github.io/OnTheWrongTrack.com/sitemap.xml
